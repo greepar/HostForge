@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - ci/apphost-linux-arm64-macos
   # Pull requests run every job except publish-nuget. Pull requests opened by the upstream workflow with
   # GITHUB_TOKEN wait for "Approve workflows to run".
   pull_request:
