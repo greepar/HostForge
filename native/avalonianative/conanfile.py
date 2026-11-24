@@ -59,6 +59,9 @@ class AvaloniaNativeConan(ConanFile):
             "EXECUTABLE_PREFIX=lib", "EXECUTABLE_EXTENSION=a", "PRODUCT_NAME=AvaloniaNative",
             "CLANG_ENABLE_MODULES=YES", "GCC_GENERATE_DEBUGGING_SYMBOLS=NO",
             "DEBUG_INFORMATION_FORMAT=", "LLVM_LTO=NO", "MACOSX_DEPLOYMENT_TARGET=12.0",
+            # main.mm materializes extern "C" IID_IUnknown, which the CoreCLR PAL of the single-file host also
+            # defines. Rename Avalonia's copy so both link into one executable.
+            "GCC_PREPROCESSOR_DEFINITIONS=IID_IUnknown=AvnIID_IUnknown",
             f"ARCHS={self._apple_arch}", f"CONFIGURATION_BUILD_DIR={root / 'out'}",
             f"OBJROOT={root / 'obj'}", f"HEADER_SEARCH_PATHS={native / 'inc'}",
         ]
@@ -82,13 +85,15 @@ class AvaloniaNativeConan(ConanFile):
         symbols = self._capture(["xcrun", "nm", "-gU", str(archive)])
         if "_CreateAvaloniaNative" not in symbols:
             raise ConanException("Archive is missing CreateAvaloniaNative")
+        if any(line.split()[-1:] == ["_IID_IUnknown"] for line in symbols.splitlines()):
+            raise ConanException("Archive still defines _IID_IUnknown, which collides with the CoreCLR PAL")
         manifest = {
             "upstreamVersion": str(self.version),
             "sourceCommit": self.conan_data["sources"][str(self.version)]["commit"],
             "rid": "osx-arm64" if self.settings.arch == "armv8" else "osx-x64",
             "deploymentTarget": "12.0", "xcode": self._capture(["xcodebuild", "-version"]),
             "sdk": self._capture(["xcrun", "--show-sdk-version"]),
-            "buildSettings": settings[:12],
+            "buildSettings": settings[:13],
             "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
         }
         save(self, str(root / "out/manifest.json"), json.dumps(manifest, indent=2) + "\n")
