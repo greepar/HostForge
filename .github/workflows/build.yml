@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      # ShiroBot fork: builds the packages ShiroBot consumes; publish-nuget still runs only on main.
+      - shirobot
   # Pull requests run every job except publish-nuget. Pull requests opened by the upstream workflow with
   # GITHUB_TOKEN wait for "Approve workflows to run".
   pull_request:
@@ -13,6 +15,11 @@ on:
 concurrency:
   group: build-${{ github.ref }}-${{ github.ref == 'refs/heads/main' && github.run_id || 'latest' }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+# ShiroBot fork: the prerelease label keeps the packages of the shirobot branch apart from upstream releases
+# of the same version. MSBuild reads it from the environment; docker run passes it on with -e _Preview.
+env:
+  _Preview: ${{ github.ref_name == 'shirobot' && 'shirobot.1' || '' }}
 
 # Keep the job graph below in sync with the Mermaid workflow diagram in DEVELOPMENT.md.
 jobs:
@@ -346,7 +353,7 @@ jobs:
         env:
           SKIA_VERSION: ${{ matrix.version }}
         run: >-
-          docker run --rm -v "$PWD:/work"
+          docker run --rm -v "$PWD:/work" -e _Preview
           -e HOSTFORGE_COMPILER_CACHE=/work/build/tools/sccache/sccache
           -e SCCACHE_DIR=/work/build/compiler-cache -e SCCACHE_CACHE_SIZE -e SCCACHE_DIRECT=false
           hostforge-skia python3 scripts/build-with-cache.py task build-skiasharp RID=linux-x64 SKIASHARP_VERSION="$SKIA_VERSION" SYSROOT=/crossrootfs/x64 JOBS=4
@@ -428,7 +435,7 @@ jobs:
       - name: Cross compile static SkiaSharp and HarfBuzzSharp
         if: steps.native-cache.outputs.cache-hit != 'true'
         run: >-
-          docker run --rm -v "$PWD:/work"
+          docker run --rm -v "$PWD:/work" -e _Preview
           -e HOSTFORGE_COMPILER_CACHE=/work/build/tools/sccache/sccache
           -e SCCACHE_DIR=/work/build/compiler-cache -e SCCACHE_CACHE_SIZE -e SCCACHE_DIRECT=false
           hostforge-skia-cross python3 scripts/build-with-cache.py task build-skiasharp RID="$TARGET_RID" SKIASHARP_VERSION="$SKIA_VERSION" SYSROOT="/crossrootfs/$TARGET_ARCH" JOBS=4
@@ -511,7 +518,7 @@ jobs:
       - name: Publish, run and audit musl NativeAOT and run the non-AOT consumer in native Alpine
         if: startsWith(matrix.target.rid, 'linux-musl-')
         run: |
-          docker run --rm -v "$PWD:$PWD" -w "$PWD" \
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" -e _Preview \
             -e ROOTFS_DIR -e HOSTFORGE_NATIVE_RID -e HOSTFORGE_SKIA_VERSION -e HOSTFORGE_CHECK_ANGLE \
             mcr.microsoft.com/dotnet/sdk@sha256:52556c0fb9d0f609ae9aeab9efeeba96f4acc2f7038f7696f2235ccbdbb8e290 \
             sh -eu -c 'apk add --no-cache clang lld llvm binutils fontconfig font-dejavu && dotnet test --project tests/HostForge.NativeAot.Tests/HostForge.NativeAot.Tests.csproj -c Release'
@@ -669,7 +676,7 @@ jobs:
       - name: Build without RID and publish and run the three-meta consumer with and without NativeAOT in native Alpine
         if: startsWith(matrix.target.rid, 'linux-musl-')
         run: |
-          docker run --rm -v "$PWD:$PWD" -w "$PWD" \
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" -e _Preview \
             -e ROOTFS_DIR -e HOSTFORGE_NATIVE_RID -e HOSTFORGE_SKIA_VERSION -e HOSTFORGE_CHECK_ANGLE -e HOSTFORGE_TEST_META \
             mcr.microsoft.com/dotnet/sdk@sha256:52556c0fb9d0f609ae9aeab9efeeba96f4acc2f7038f7696f2235ccbdbb8e290 \
             sh -eu -c 'apk add --no-cache clang lld llvm binutils fontconfig font-dejavu && dotnet test --project tests/HostForge.NativeAot.Tests -c Release'
@@ -1029,7 +1036,7 @@ jobs:
       - name: Build and deploy HostLibs
         if: steps.cache_hostlibs.outputs.cache-hit != 'true'
         run: >-
-          docker run --rm -v "$PWD:/work"
+          docker run --rm -v "$PWD:/work" -e _Preview
           -e HOSTFORGE_COMPILER_CACHE=/work/build/tools/sccache/sccache
           -e SCCACHE_DIR=/work/build/compiler-cache -e SCCACHE_CACHE_SIZE -e SCCACHE_DIRECT=false
           hostforge-hostlibs python3 scripts/build-with-cache.py task build-hostlibs RID="$TARGET_RID" HOSTLIBS_VERSION="$HOSTLIBS_VERSION" SYSROOT="/crossrootfs/$TARGET_ARCH" JOBS=4
@@ -1102,7 +1109,7 @@ jobs:
       # not exit after the tests.
       - name: Run the Static AppHost matrix
         run: >-
-          docker run --rm --init -v "$PWD:/work" -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT hostforge-static-apphost
+          docker run --rm --init -v "$PWD:/work" -e _Preview -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT hostforge-static-apphost
           bash -c 'PATH="$DOTNET_ROOT:$PATH" dotnet test --project tests/HostForge.StaticAppHost.Tests/HostForge.StaticAppHost.Tests.csproj -c Release -v:minimal'
 
       - name: Restore ownership of container test outputs
@@ -1159,7 +1166,7 @@ jobs:
 
       - name: Link Avalonia apphost templates for Linux
         run: >-
-          docker run --rm -v "$PWD:/work" -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT -e SKIASHARP_VERSION hostforge-link
+          docker run --rm -v "$PWD:/work" -e _Preview -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT -e SKIASHARP_VERSION hostforge-link
           bash -c 'PATH="$DOTNET_ROOT:$PATH" task link-avalonia SKIASHARP_VERSION="$SKIASHARP_VERSION" TARGET_OS=linux SYSROOT=/crossrootfs/x64'
 
       - name: Restore ownership of container link outputs
@@ -1222,7 +1229,7 @@ jobs:
 
       - name: Link Avalonia apphost templates for Linux
         run: >-
-          docker run --rm -v "$PWD:/work" -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT -e SKIASHARP_VERSION hostforge-link
+          docker run --rm -v "$PWD:/work" -e _Preview -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT -e SKIASHARP_VERSION hostforge-link
           bash -c 'PATH="$DOTNET_ROOT:$PATH" task link-avalonia SKIASHARP_VERSION="$SKIASHARP_VERSION" TARGET_OS=linux SYSROOT=/crossrootfs/x64'
 
       - name: Restore ownership of container link outputs
@@ -1286,7 +1293,7 @@ jobs:
 
       - name: Link Avalonia apphost templates
         run: >-
-          docker run --rm -v "$PWD:/work" -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT
+          docker run --rm -v "$PWD:/work" -e _Preview -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT
           -e SKIASHARP_VERSION -e TARGET_RID -e TARGET_ARCH -e TARGET_OS hostforge-link
           bash -c 'PATH="$DOTNET_ROOT:$PATH" task link-avalonia SKIASHARP_VERSION="$SKIASHARP_VERSION" TARGET_OS="$TARGET_OS" RID="$TARGET_RID" SYSROOT="/crossrootfs/$TARGET_ARCH"'
 
@@ -1344,7 +1351,7 @@ jobs:
       - name: Run Avalonia App Host package tests in native Alpine
         if: matrix.target.os == 'linux-musl'
         run: |
-          docker run --rm -v "$PWD:$PWD" -w "$PWD" -e SkiaSharpVersion="$SKIASHARP_VERSION" -e HOSTFORGE_NATIVE_RID \
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" -e _Preview -e SkiaSharpVersion="$SKIASHARP_VERSION" -e HOSTFORGE_NATIVE_RID \
             mcr.microsoft.com/dotnet/sdk@sha256:52556c0fb9d0f609ae9aeab9efeeba96f4acc2f7038f7696f2235ccbdbb8e290 \
             sh -eu -c 'apk add --no-cache bash binutils fontconfig font-dejavu
               wget -qO /tmp/dotnet-install.sh https://dot.net/v1/dotnet-install.sh
@@ -1400,7 +1407,7 @@ jobs:
 
       - name: Link Avalonia apphost templates
         run: >-
-          docker run --rm -v "$PWD:/work" -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT
+          docker run --rm -v "$PWD:/work" -e _Preview -v "$DOTNET_ROOT:$DOTNET_ROOT:ro" -e DOTNET_ROOT
           -e SKIASHARP_VERSION -e TARGET_RID -e TARGET_ARCH -e TARGET_OS hostforge-link
           bash -c 'PATH="$DOTNET_ROOT:$PATH" task link-avalonia SKIASHARP_VERSION="$SKIASHARP_VERSION" TARGET_OS="$TARGET_OS" RID="$TARGET_RID" SYSROOT="/crossrootfs/$TARGET_ARCH"'
 
@@ -1458,7 +1465,7 @@ jobs:
       - name: Run Avalonia App Host package tests in native Alpine
         if: matrix.target.os == 'linux-musl'
         run: |
-          docker run --rm -v "$PWD:$PWD" -w "$PWD" -e SkiaSharpVersion="$SKIASHARP_VERSION" -e HOSTFORGE_NATIVE_RID \
+          docker run --rm -v "$PWD:$PWD" -w "$PWD" -e _Preview -e SkiaSharpVersion="$SKIASHARP_VERSION" -e HOSTFORGE_NATIVE_RID \
             mcr.microsoft.com/dotnet/sdk@sha256:52556c0fb9d0f609ae9aeab9efeeba96f4acc2f7038f7696f2235ccbdbb8e290 \
             sh -eu -c 'apk add --no-cache bash binutils fontconfig font-dejavu
               wget -qO /tmp/dotnet-install.sh https://dot.net/v1/dotnet-install.sh
