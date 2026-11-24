@@ -131,6 +131,31 @@
   </Target>
 
   <!--
+    The singlefilehost of a self-contained single-file publish embeds the native .NET runtime it was linked
+    with, and the bundle carries the managed framework of the selected Microsoft.NETCore.App runtime pack.
+    Both halves must come from the same runtime version. An SDK with a newer patch selects a newer runtime
+    pack by default (TargetLatestRuntimePatch), so the build fails instead of publishing a mismatched pair.
+    Templates from packages that predate AppHostTemplateRuntimeVersion are not checked.
+  -->
+  <Target Name="CheckAvaloniaSingleFileHostRuntime"
+          BeforeTargets="PrepareForBuild"
+          DependsOnTargets="ResolveAvaloniaAppHostActivation;ResolveFrameworkReferences"
+          Condition="'$(PublishSingleFile)' == 'true' and '$(SelfContained)' == 'true'">
+    <ItemGroup Condition="'$(AvaloniaAppHostActive)' == 'true'">
+      <_AvaloniaSelectedRuntimePack Include="@(ResolvedRuntimePack)"
+                                    Condition="'%(ResolvedRuntimePack.FrameworkName)' == 'Microsoft.NETCore.App'" />
+    </ItemGroup>
+    <PropertyGroup Condition="'$(AvaloniaAppHostActive)' == 'true'">
+      <_AvaloniaTemplateRuntimeVersion>@(_AvaloniaMatchedRid->'%(AppHostTemplateRuntimeVersion)')</_AvaloniaTemplateRuntimeVersion>
+      <_AvaloniaSelectedRuntimeVersion>@(_AvaloniaSelectedRuntimePack->'%(NuGetPackageVersion)')</_AvaloniaSelectedRuntimeVersion>
+    </PropertyGroup>
+    <Error Condition="'$(AvaloniaAppHostActive)' == 'true' and '$(_AvaloniaTemplateRuntimeVersion)' != ''
+                      and '$(_AvaloniaSelectedRuntimeVersion)' != '' and '$(_AvaloniaTemplateRuntimeVersion)' != '$(_AvaloniaSelectedRuntimeVersion)'"
+           Code="HFAVA001"
+           Text="The ChsBuffer.Avalonia.AppHost singlefilehost for $(_AvaloniaTemplateTfm)/$(_AvaloniaTemplateRid) embeds the native .NET runtime $(_AvaloniaTemplateRuntimeVersion), but this self-contained publish selects the Microsoft.NETCore.App runtime pack $(_AvaloniaSelectedRuntimeVersion). Set RuntimeFrameworkVersion to $(_AvaloniaTemplateRuntimeVersion), use a ChsBuffer.Avalonia.AppHost version built for $(_AvaloniaSelectedRuntimeVersion), or set AvaloniaAppHostActive to false to use the SDK host." />
+  </Target>
+
+  <!--
     The templates link these libraries statically and resolve their DllImports from the main program.
     The symbol files belong to the packages' dynamic libraries and cannot symbolize the linked code.
     Single-file bundling and the publish directory copy both start from ResolvedFileToPublish after

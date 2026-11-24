@@ -76,6 +76,12 @@
 
     <ItemGroup>
       <_AvaloniaPackTfm Include="$(AvaloniaTemplateTfms)" />
+      <!-- The native .NET runtime that each TFM's singlefilehost embeds, as Directory.Build.props selects it for the link. -->
+      <_AvaloniaPackTfm>
+        <RuntimeVersion Condition="$([System.String]::Copy('%(Identity)').StartsWith('net10.0'))">$(HostLibsNet10Version)</RuntimeVersion>
+        <RuntimeVersion Condition="$([System.String]::Copy('%(Identity)').StartsWith('net11.0'))">$(HostLibsNet11Version)</RuntimeVersion>
+      </_AvaloniaPackTfm>
+      <_AvaloniaPackTfmWithoutRuntime Include="@(_AvaloniaPackTfm)" Condition="'%(RuntimeVersion)' == ''" />
       <_AvaloniaTemplateHostFileToPack Include="@(_AvaloniaPackTfm->'$(AvaloniaAppHostArtifactRoot)/%(Identity)/$(AvaloniaHostRid)/apphost$(_AvaloniaPackRidExtension)')">
         <PackagePath>template/%(Identity)/$(AvaloniaHostRid)/</PackagePath>
       </_AvaloniaTemplateHostFileToPack>
@@ -110,6 +116,7 @@
         <Text><![CDATA[    <AvaloniaAppHostRids Include="$(AvaloniaHostRid)">
       <AppHostTemplateTfm>%(Identity)</AppHostTemplateTfm>
       <AvaloniaNativeVersion>$(_AvaloniaPackNativeVersion)</AvaloniaNativeVersion>
+      <AppHostTemplateRuntimeVersion>%(RuntimeVersion)</AppHostTemplateRuntimeVersion>
       <AppHostTemplatePath>%24([MSBuild]::NormalizePath('%24(MSBuildThisFileDirectory)', '..', 'template/%(Identity)/$(AvaloniaHostRid)/apphost$(_AvaloniaPackRidExtension)'))</AppHostTemplatePath>
       <SingleFileHostTemplatePath>%24([MSBuild]::NormalizePath('%24(MSBuildThisFileDirectory)', '..', 'template/%(Identity)/$(AvaloniaHostRid)/singlefilehost$(_AvaloniaPackRidExtension)'))</SingleFileHostTemplatePath>
     </AvaloniaAppHostRids>]]></Text>
@@ -118,6 +125,8 @@
 
     <Error Condition="'@(_AvaloniaPackTfm)' == ''"
            Text="AvaloniaTemplateTfms is empty." />
+    <Error Condition="'@(_AvaloniaPackTfmWithoutRuntime)' != ''"
+           Text="No HostLibs version is defined for template TFMs: @(_AvaloniaPackTfmWithoutRuntime). Add the TFM to _CollectAvaloniaHostTemplates." />
     <Error Condition="'@(_AvaloniaMissingTemplateHostFile)' != ''"
            Text="Missing Avalonia apphost template artifacts under $(AvaloniaAppHostArtifactRoot): @(_AvaloniaMissingTemplateHostFile, ', ')." />
 
