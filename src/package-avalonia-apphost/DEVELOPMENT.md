@@ -138,8 +138,12 @@ from the official build container of the newest runtime in `native/hostlibs/vers
 the RID. The PGO build of the .NET 11 GC is compiled with LTO, so its HostLibs contain LLVM
 bitcode that only an LLVM at least as new as the compiling one can link; the container of the
 newest runtime has that LLVM. The stage adds fontconfig to the rootfs of the container, from the
-package checksums of the SkiaSharp image of the RID, because the templates link `-lfontconfig`. The resulting Linux executables need the
-system's `libfontconfig.so.1` at startup.
+package checksums of the SkiaSharp image of the RID: the link compiles `fontconfig-lazy.c` against
+its headers. That file defines the fontconfig functions Skia calls and resolves each one from
+`libfontconfig.so.1` with `dlopen` on first use, so the executables have no `DT_NEEDED` entry for
+fontconfig and start without it. The module initializer loads `libfontconfig.so.1` before it binds
+SkiaSharp to the executable and throws `DllNotFoundException` when it is missing. A function a new
+Skia calls that the file lacks fails the link as an undefined symbol; add it to the file.
 
 ```sh
 docker build $(python scripts/upstream.py build-args) -f native/hostlibs/linux.Dockerfile --target link --build-arg IMAGE=<container> --build-arg RID=linux-x64 -t hostforge-link .

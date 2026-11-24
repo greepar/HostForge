@@ -32,7 +32,7 @@ SkiaSharp 4 packages use the `-skia4` suffix on the corresponding versions.
 
 Each RID package depends on the SkiaSharp and HarfBuzzSharp versions linked into its templates.
 
-Linux templates require the system's `libfontconfig.so.1` to start.
+Linux templates start without fontconfig: they load the system's `libfontconfig.so.1` when SkiaSharp first loads. Without it, SkiaSharp throws `DllNotFoundException`, as it does when its dynamic library cannot load.
 
 macOS templates also link AvaloniaNative. The resolver uses it when the restored
 `Avalonia.Native` package version matches the template. Other versions retain their
@@ -46,7 +46,11 @@ The templates replace the SDK host when a C# project that targets .NET 10 or .NE
 
 Other builds keep the SDK host and publish the dynamic libraries. Builds without a RuntimeIdentifier and projects that target an earlier .NET do so silently. `UseAppHost=false`, F# and Visual Basic projects, and RIDs without a template warn. `PublishAot=true` warns unless the project references a HostForge static graphics package such as `ChsBuffer.SkiaSharp.Static`, which links the libraries into the NativeAOT executable.
 
-The single-file host embeds the native .NET runtime it was built from (10.0.15 or 11.0.0), while the managed framework comes from the runtime pack chosen at publish time. The .NET SDK 11.0.100 selects exactly these runtime packs; with another SDK, set `RuntimeFrameworkVersion` to the template's version.
+The single-file host embeds the native .NET runtime it was built from (10.0.15 or 11.0.0), while the managed framework comes from the runtime pack chosen at publish time. The .NET SDK 11.0.100 selects exactly these runtime packs; an SDK with a newer patch selects a newer one, and a self-contained single-file build then fails with `HFAVA001`. Set `RuntimeFrameworkVersion` to the template's version for self-contained builds:
+
+```xml
+<RuntimeFrameworkVersion Condition="'$(SelfContained)' == 'true'">11.0.0</RuntimeFrameworkVersion>
+```
 
 ## MSBuild properties
 

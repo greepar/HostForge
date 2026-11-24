@@ -72,6 +72,7 @@
       <_AvaloniaDesktopNativeDir>$([MSBuild]::NormalizePath('$(RepoRoot)', 'artifacts/avalonianative/$(AvaloniaNativeVersion)', '$(AvaloniaHostRid)'))</_AvaloniaDesktopNativeDir>
       <_AvaloniaDesktopNativeArchive>$(_AvaloniaDesktopNativeDir)/libAvaloniaNative.a</_AvaloniaDesktopNativeArchive>
       <_AvaloniaAppleExportsFile>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'macos-graphics.exports'))</_AvaloniaAppleExportsFile>
+      <_AvaloniaFontconfigLazySource>$([MSBuild]::NormalizePath('$(MSBuildProjectDirectory)', 'fontconfig-lazy.c'))</_AvaloniaFontconfigLazySource>
       <_AvaloniaNativeLibExtension Condition="'$(_AvaloniaHostRidIsWindows)' == 'True'">.lib</_AvaloniaNativeLibExtension>
       <_AvaloniaNativeLibExtension Condition="'$(_AvaloniaHostRidIsWindows)' != 'True'">.a</_AvaloniaNativeLibExtension>
       <GroupNativeLibraries Condition="'$(_AvaloniaHostRidIsLinux)' == 'True' and $(SkiaSharpVersion.StartsWith('4.'))">true</GroupNativeLibraries>
@@ -137,8 +138,13 @@
                  Condition="'$(_AvaloniaHostRidIsWindows)' != 'True' and '$(_ResolvedSysroot)' != ''" />
       <LinkerArg Include="--target=$(_AvaloniaHostTargetTriple)"
                  Condition="'$(_AvaloniaHostTargetTriple)' != ''" />
-      <LinkerArg Include="-lfontconfig"
+      <!-- Bind fontconfig lazily instead of -lfontconfig, so the host starts without libfontconfig.so.1.
+           The driver compiles the C file with the target and sysroot of the link; -x none restores
+           detection by extension for the inputs that follow. -->
+      <LinkerArg Include="-x c -O2 -ffile-prefix-map=&quot;$(MSBuildProjectDirectory)&quot;=. &quot;$(_AvaloniaFontconfigLazySource)&quot; -x none;-ldl"
                  Condition="'$(_AvaloniaHostRidIsLinux)' == 'True'" />
+      <LinkerInput Include="$(_AvaloniaFontconfigLazySource)"
+                   Condition="'$(_AvaloniaHostRidIsLinux)' == 'True'" />
       <LinkerArg Include="-Wl,--version-script=$(AvaloniaExportsFile)"
                  Condition="'$(_AvaloniaHostRidIsLinux)' == 'True' and '$(AvaloniaExportsFile)' != ''" />
       <LinkerArg Include="-framework AppKit;-framework Carbon;-framework CoreFoundation;-framework CoreGraphics;-framework CoreServices;-framework CoreText;-framework CoreVideo;-framework Foundation;-framework IOSurface;-framework Metal;-framework OpenGL;-framework QuartzCore;-framework UniformTypeIdentifiers;-lobjc"

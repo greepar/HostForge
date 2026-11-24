@@ -213,7 +213,7 @@ task build-skiasharp SYSROOT=build/rootfs/x64
 
 ### 3. 生成并验证 Avalonia 宿主
 
-Linux 模板在最新运行时的官方构建容器中链接（`linux.Dockerfile` 的 `link` 阶段，rootfs 中加入 fontconfig），该容器的 LLVM 能链接每个运行时的 HostLibs：
+Linux 模板在最新运行时的官方构建容器中链接（`linux.Dockerfile` 的 `link` 阶段，rootfs 中加入 fontconfig 头文件，供延迟绑定 fontconfig 的 `fontconfig-lazy.c` 编译），该容器的 LLVM 能链接每个运行时的 HostLibs：
 
 ```bash
 docker build $(python scripts/upstream.py build-args) -f native/hostlibs/linux.Dockerfile --target link --build-arg IMAGE=<最新运行时的 linux-x64 容器> --build-arg RID=linux-x64 -t hostforge-link .

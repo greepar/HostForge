@@ -249,6 +249,23 @@ public class AvaloniaAppHostLinuxTests
         }
     }
 
+    // fontconfig-lazy.c binds fontconfig on first use, so neither host needs libfontconfig.so.1 to start.
+    [Test]
+    [MethodDataSource(typeof(RepoContext), nameof(RepoContext.AvaloniaTemplateTfmCases))]
+    public async Task LinkedHosts_DoNotNeedFontconfig(string targetFramework)
+    {
+        foreach (string host in new[] { "apphost", "singlefilehost" })
+        {
+            string path = Path.Combine(
+                RepoContext.RepoRoot, "artifacts", "avalonia-host", RepoContext.TargetAvaloniaVersion, targetFramework, Rid, host);
+            AssertEx.FileExists(path);
+            CommandResult readelf = await CommandRunner.RunAsync("readelf", $"-d -W \"{path}\"", Path.GetDirectoryName(path)!);
+            AssertEx.Success(readelf, $"dynamic section of {Rid} {host} ({targetFramework})");
+            AssertEx.Contains(readelf.StandardOutput, "(NEEDED)");
+            AssertEx.NotContains(readelf.StandardOutput, "libfontconfig");
+        }
+    }
+
     private static void AssertLoadedSkiaSharpNativeVersion(string output)
     {
         const string prefix = "SkiaSharpVersion.Native=";
